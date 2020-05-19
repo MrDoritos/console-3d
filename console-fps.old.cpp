@@ -4,9 +4,6 @@
 #include "imath.h"
 #include <math.h>
 #include <vector>
-#include <fstream>
-#include <string>
-#include <strstream>
 
 struct vec3d {
 	vec3d() {
@@ -102,7 +99,6 @@ struct vec3d {
 */
 
 static double camx,camy,camz;
-static bool showTriangles;
 
 struct camera {
 	vec3d position;
@@ -139,33 +135,39 @@ struct mesh {
 	}
 	
 	void rotate(vec3d r, vec3d origin) {
+		return;
 		for (auto& tri : tris) {
 			//Upon x
 			for (int i = 0; i < 3; i++) {
+				//tri.p[i].x = ((tri.p[i].x - origin.x) * cos(rad(r.x))) - ((origin.y - tri.p[i].y) * sin(rad(r.x))) + origin.x;
+				//tri.p[i].y = ((origin.y - tri.p[i].y) * cos(rad(r.x))) - ((tri.p[i].x - origin.x) * sin(rad(r.x))) + origin.y;
+				//-sin(theta)x == cos(theta)y
+				//tri.p[i].x = tri.p[i].x * cos(rad(r.x));
+				//tri.p[i].y = tri.p[i].y * sin(rad(r.x));
+				
+				//Half working
+				//tri.p[i].y = tri.p[i].y * cos(rad(r.x)) - tri.p[i].z * sin(rad(r.x));
+				//tri.p[i].z = tri.p[i].y * sin(rad(r.x)) + tri.p[i].z * cos(rad(r.x));
+				
+				tri.p[i] -= origin;
+				vec3d old = tri.p[i];
 				//x
 				if (r.x != 0.0d) {
-					tri.p[i] -= origin;
-					vec3d old = tri.p[i];
 					tri.p[i].y = old.y * cos(rad(r.x)) - old.z * sin(rad(r.x));
 					tri.p[i].z = old.y * sin(rad(r.x)) + old.z * cos(rad(r.x));
-					tri.p[i] += origin;
 				}
 				//y
 				if (r.y != 0.0d) {
-					tri.p[i] -= origin;
-					vec3d old = tri.p[i];
 					tri.p[i].x = old.x * cos(rad(r.y)) + old.z * sin(rad(r.y));
 					tri.p[i].z = -old.x * sin(rad(r.y)) + old.z * cos(rad(r.y));
-					tri.p[i] += origin;
 				}
 				//z
 				if (r.z != 0.0d) {
-					tri.p[i] -= origin;
-					vec3d old = tri.p[i];
 					tri.p[i].x = old.x * cos(rad(r.z)) - old.y * sin(rad(r.z));
 					tri.p[i].y = old.x * sin(rad(r.z)) + old.y * cos(rad(r.z));
-					tri.p[i] += origin;
-				}								
+				}
+								
+				tri.p[i] += origin;
 			}
 		}
 	}
@@ -201,9 +203,9 @@ void rasterTriangle(const triangle* tri) {
 	const double tanFov = tan(hFov);
 	double width;
 	if (console::getImage() == IMAGE_LINUX)
-		width = (adv::width / 4.0d) - 4.0d;
+		double width = (adv::width / 4.0d) - 4.0d;
 	else
-		width = adv::width - 4.0d;//(adv::width / 2.0d) - 4.0d;
+		double width = (adv::width / 2.0d) - 4.0d;
 	double height = adv::height - 4.0d;
 
 	//Translate the x via the z value
@@ -226,9 +228,12 @@ void rasterTriangle(const triangle* tri) {
 		double scale0 = delta0 / length0;
 		double scale1 = delta1 / length1;
 		double scale2 = delta2 / length2;
+		//x_trans0[i] = scale0 * width;
 		translation.p[0].x = scale0 * width;
 		translation.p[1].x = scale1 * width;
 		translation.p[2].x = scale2 * width;
+		//x_trans1[i] = scale1 * width;
+		//x_trans2[i] = scale2 * width;
 	}
 	
 	//Translate the y via the z value
@@ -251,104 +256,128 @@ void rasterTriangle(const triangle* tri) {
 		double scale0 = delta0 / length0;
 		double scale1 = delta1 / length1;
 		double scale2 = delta2 / length2;
+		//y_trans0[i] = scale0 * height;
+		//y_trans1[i] = scale1 * height;
 		translation.p[0].y = scale0 * height;
 		translation.p[1].y = scale1 * height;
 		translation.p[2].y = scale2 * height;
 	}
 
-	/*
+	//Wireframe while debugging
+	
 	if (dist(translation.p[0].x, translation.p[0].y, translation.p[1].x, translation.p[1].y) > 1000 ||
 		dist(translation.p[1].x, translation.p[1].y, translation.p[2].x, translation.p[2].y) > 1000 ||
-		dist(translation.p[2].x, translation.p[2].y, translation.p[1].x, translation.p[1].y) > 1000);
+		dist(translation.p[2].x, translation.p[2].y, translation.p[1].x, translation.p[1].y) > 1000 ||
+		dist(translation.p[0].x, translation.p[0].y, translation.p[1].x, translation.p[1].y) < 0 ||
+		dist(translation.p[1].x, translation.p[1].y, translation.p[2].x, translation.p[2].y) < 0 ||
+		dist(translation.p[2].x, translation.p[2].y, translation.p[1].x, translation.p[1].y) < 0);
 		return;
-	*/
 	
-	//z depth change
-	const char zdepth[] = "#+-. ";
-	
-	//Wireframe while debugging
-	//if (adv::bound(translation.p[0].x, translation.p[0].y) &&
-	//	adv::bound(translation.p[1].x, translation.p[1].y) &&
-	//	adv::bound(translation.p[2].x, translation.p[2].y)) {
-		if (showTriangles && (camz - tri->p[0].z) < 20) {
-			char c = zdepth[(int)floor(((camz - tri->p[0].z) / 20) * sizeof(zdepth))];
-			char color = FWHITE | BBLACK;
-			adv::line(translation.p[0].x, translation.p[0].y, translation.p[1].x, translation.p[1].y, c, color);
-			adv::line(translation.p[1].x, translation.p[1].y, translation.p[2].x, translation.p[2].y, c, color);
-			adv::line(translation.p[2].x, translation.p[2].y, translation.p[0].x, translation.p[0].y, c, color);
-		} else {
-			adv::triangle(translation.p[0].x,translation.p[0].y,translation.p[1].x,translation.p[1].y,translation.p[2].x,translation.p[2].y);
-		}
-	//}
-}
-
-bool inView(const triangle& tri) {
-	for (int i = 0; i < 3; i++) {
-		if (tri.p[i].z > camz)
-			return false;
-	}
-	return true;
+	adv::line(translation.p[0].x, translation.p[0].y, translation.p[1].x, translation.p[1].y);
+	adv::line(translation.p[1].x, translation.p[1].y, translation.p[2].x, translation.p[2].y);
+	adv::line(translation.p[2].x, translation.p[2].y, translation.p[0].x, translation.p[0].y);
 }
 
 void rasterTriangles(const triangle* tri, int length) {
 	adv::clear();
 	for (int i = 0; i < length; i++)
-		if (inView(tri[i]))
-			rasterTriangle(&tri[i]);
+		rasterTriangle(&tri[i]);
 	adv::draw();
 }
 
-void renderMesh(mesh* mesh) {
-	//z depth sort
-	std::sort(mesh->tris.begin(), mesh->tris.end(), [](triangle& a, triangle& b)
-	{
-		return (a.p[0].z < b.p[0].z);
-	});
+void renderMesh(const mesh* mesh) {
 	for (auto t : mesh->tris)
-		if (inView(t))
-			rasterTriangle(&t);
+		rasterTriangle(&t);
 }
 
-bool loadObject(const char* file, mesh& mesh) {
-	std::ifstream f(file);
-	if (!f.is_open())
-		return false;
+void squaredemo(double camx, double camy, double camz) {
+	const vec3d square[12]={vec3d(1,1,1,  1,3,1),
+				vec3d(1,1,1,  3,1,1),
+				vec3d(1,1,1,  1,1,3),
+				vec3d(3,3,1,  3,1,1),
+				vec3d(3,3,1,  1,3,1),
+				vec3d(3,3,1,  3,3,3),
+				vec3d(3,1,3,  3,1,1),
+				vec3d(3,1,3,  1,1,3),
+				vec3d(3,1,3,  3,3,3),
+				vec3d(1,3,3,  1,3,1),
+				vec3d(1,3,3,  1,1,3),
+				vec3d(1,3,3,  3,3,3)};
+
+	const vec3d square2[12]={vec3d(1,1,1,  1,3,1),
+				vec3d(1,1,1,  3,1,1),
+				vec3d(1,1,1,  1,1,3),
+				vec3d(3,3,1,  3,1,1),
+				vec3d(3,3,1,  1,3,1),
+				vec3d(3,3,1,  3,3,3),
+				vec3d(3,1,3,  3,1,1),
+				vec3d(3,1,3,  1,1,3),
+				vec3d(3,1,3,  3,3,3),
+				vec3d(1,3,3,  1,3,1),
+				vec3d(1,3,3,  1,1,3),
+				vec3d(1,3,3,  3,1,3)};
+
+	const double fov = rad(90.0d);
+	const double hFov = fov / 2.0d;
+	//const double hFov = fov;
+	const double tanFov = tan(hFov);
 	
-		std::vector<vec3d> verts;
-	while (!f.eof()) {
-			char line[128];
-			f.getline(line, 128);
+	//const double width = double(CONSOLEWIDTH-4) / 2;
+	//const double height = double(CONSOLEHEIGHT-4);
+	double width = (adv::width / 4.0d) - 4.0d;
+	double height = adv::height - 4.0d;
 
-			std::strstream s;
-			s << line;
-
-			char junk;
-
-			if (line[0] == 'v')
-			{
-					vec3d v;
-					s >> junk >> v.x >> v.y >> v.z;
-					verts.push_back(v);
-			}
-
-				if (line[0] == 'f')
-				{
-					int f[3];
-					s >> junk >> f[0] >> f[1] >> f[2];
-					mesh.tris.push_back({ verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1] });
-				}
+	double x_trans0[12] = {0.0d}, y_trans0[12] = {0.0d},
+	       x_trans1[12] = {0.0d}, y_trans1[12] = {0.0d};
+	
+	vec3d* cur;
+	
+	//Translate the x via the z value
+	for (int i = 0; i < 12; i++) {
+		cur = (vec3d*)&square[i];
+		double oppo0 = tanFov * fabs(cur->z0 - camz);
+		double oppo1 = tanFov * fabs(cur->z1 - camz);
+		double length0 = oppo0 * 2;
+		double length1 = oppo1 * 2;
+		double minx0 = camx - oppo0;
+		double maxx0 = camx + oppo0;
+		double minx1 = camx - oppo1;
+		double maxx1 = camx + oppo1;
+		double delta0 = cur->x0 - minx0;
+		double delta1 = cur->x1 - minx1;
+		double scale0 = delta0 / length0;
+		double scale1 = delta1 / length1;
+		x_trans0[i] = scale0 * width;
+		x_trans1[i] = scale1 * width;
 	}
-return true;	
+	//Translate the y via the z value
+	for (int i = 0; i < 12; i++) {
+		cur = (vec3d*)&square[i];
+		double oppo0 = tanFov * fabs(cur->z0 - camz);
+		double oppo1 = tanFov * fabs(cur->z1 - camz);
+		double length0 = oppo0 * 2;
+		double length1 = oppo1 * 2;
+		double miny0 = camy - oppo0;
+		double maxy0 = camy + oppo0;
+		double miny1 = camy - oppo1;
+		double maxy1 = camy + oppo1;
+		double delta0 = cur->y0 - miny0;
+		double delta1 = cur->y1 - miny1;
+		double scale0 = delta0 / length0;
+		double scale1 = delta1 / length1;
+		y_trans0[i] = scale0 * height;
+		y_trans1[i] = scale1 * height;
+	}
+	//Raster
+	adv::clear();
+	for (int i = 0; i < 12; i++) {
+		adv::line(x_trans0[i] + 1, y_trans0[i] + 2, x_trans1[i] + 1, y_trans1[i] + 2, L' ', BBLUE | FWHITE);
+	}
+	adv::draw();
+
 }
 
 int main(int argc, char** argv) {
-	mesh* currentMesh;
-	mesh load;
-	if (argc < 2 || !loadObject(argv[1], load))
-		currentMesh = &cube;
-	else
-		currentMesh = &load;
-	
 	while (!adv::ready)
 		console::sleep(50);
 	if (console::getImage() == IMAGE_LINUX) {
@@ -356,57 +385,50 @@ int main(int argc, char** argv) {
 		adv::setDoubleWidth(true);
 	}
 	adv::setThreadState(false);
-	currentMesh->translate(vec3d({0.0d,0,-2.0d}));
+	//cube.translate(vec3d({2.0d,0.0d,-2.0d}));
 
 	int key = 0;
 	//double cmx = 2.0d, cmy = 2.0d, cmz = 0.0d;
-	camx = 0.0d; camy = 0.0d; camz = 0.0d;
+	camx = 2.0d; camy = 2.0d; camz = 2.0d;
 	while ((key = console::readKeyAsync()) != 27) {
 		switch(key) {
 			case 'W':
 			case 'w':
 			case VK_UP:
-				camz-=0.1d;
+				camz-=1;
 				break;
 			case 'd':
 			case 'D':
 			case VK_RIGHT:
-				camx+=0.1d;
+				camx+=1;
 				break;
 			case 'S':
 			case 's':
 			case VK_DOWN:
-				camz+=0.1d;
+				camz+=1;
 				break;
 			case 'A':
 			case 'a':
 			case VK_LEFT:
-				camx-=0.1d;
+				camx-=1;
 				break;
 			case 'l':
-				camy+=0.1d;
+				camy+=1;
 				break;
 			case 'o':
 			case ' ':
-				camy-=0.1d;
-				break;
-			case 'k':
-				currentMesh->rotate(vec3d({0,10.0d,0}),vec3d({2,0,2}));
-				break;
-			case ';':
-				break;
-			case '0':
-				showTriangles = !showTriangles;
+				camy-=1;
 				break;
 		}
 		//squaredemo(cmx, cmy, cmz);
 		//rasterTriangles(&cube[0], 12);
 		adv::clear();
-		renderMesh(currentMesh);
+		renderMesh(&cube);
+		adv::write(0,0,'@', FRED);
 		//cube.translate(vec3d({0.0d,1.0d,0.0d}));
-		//currentMesh->rotate(vec3d({0.0d,00.0,5.0}),vec3d({0,0,0}));
+		//cube.rotate(vec3d({0.0d,0.0d,10.0d}),vec3d({0,0,0}));
 		//cube.scale(vec3d({1.1d,1,1}),vec3d({0,0,0}));
 		adv::draw();
-		console::sleep(16);
+		console::sleep(33);
 	}
 }
